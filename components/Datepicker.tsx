@@ -3,93 +3,86 @@ import Modal from "react-modal";
 import { useEffect, useState } from "react";
 import {
   getDaysInMonth,
-  getMonth,
-  getYear,
   isBefore,
   isEqual,
-  startOfDay,
   format,
   setDay,
+  subMonths,
+  addMonths,
+  startOfMonth,
+  getMonth,
+  Locale,
 } from "date-fns";
-import { ptBR, enUS } from "date-fns/locale";
 import getDay from "date-fns/getDay";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/outline";
 
-enum CalendarDayType {
-  PREVIOUS = "PREVIOUS",
-  CURRENT = "CURRENT",
-  NEXT = "NEXT",
-}
-
 Modal.setAppElement("#modal");
 
-export default function Datepicker({ isRange = false }: { isRange: boolean }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [month, setMonth] = useState(getMonth(new Date()));
-  const [year, setYear] = useState(getYear(new Date()));
-  const [daysInCalendar, setDaysInCalendar] = useState<
-    {
-      date: Date;
-      type: CalendarDayType;
-    }[][]
-  >([]);
-  const [selectFirstDate, setSelectFirstdate] = useState<Date | null>(null);
-  const [selectSecondDate, setSelectSecondDate] = useState<Date | null>(null);
+interface Props {
+  locale: Locale;
+  isOpen: boolean;
+  firstDateSelected: Date | null;
+  secondDateSelected: Date | null;
+  onClose(): void;
+  onFirstDateChange(date: Date): void;
+  onSecondDateChange(date: Date): void;
+}
+
+export default function Datepicker({
+  isOpen,
+  onClose,
+  locale,
+  onFirstDateChange,
+  onSecondDateChange,
+  firstDateSelected,
+  secondDateSelected,
+}: Props) {
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [daysInCalendar, setDaysInCalendar] = useState<Date[][]>([]);
+
   const [hoveredDate, setHoveredDate] = useState<Date | null>(null);
 
-  const onOpenHandler = () => {
-    setIsOpen(true);
-  };
-
-  const onCloseHandler = () => {
-    setIsOpen(false);
-  };
-
   function getDaysInCalendar() {
-    let daysInCalendar: { date: Date; type: CalendarDayType }[][] = [];
+    let daysInCalendar: Date[][] = [];
     const numberOfRows = 6;
 
-    const firstDayOfWeek = getDay(startOfDay(new Date(year, month)));
+    const firstDayOfWeek = getDay(startOfMonth(currentDate)); // quinta feira
 
-    const numberOfDaysInPreviousMonth = getDaysInMonth(
-      new Date(year, month - 1)
-    );
-    const daysInPreviousMonth: number[] = Array.from(
+    const previousMonth = subMonths(currentDate, 1);
+    const nextMonth = addMonths(currentDate, 1);
+    const numberOfDaysInPreviousMonth = getDaysInMonth(previousMonth); // 31
+
+    const daysInPreviousMonth: Date[] = Array.from(
       Array(numberOfDaysInPreviousMonth),
-      (_, index) => index
+      (_, index) => new Date(previousMonth.setDate(index + 1))
     );
-    const previousMonthDaysDisplayed: number[] = daysInPreviousMonth.slice(
+    const previousMonthDaysDisplayed: Date[] = daysInPreviousMonth.slice(
       numberOfDaysInPreviousMonth - firstDayOfWeek
     );
 
     const numberOfDaysInThisMounth: number[] = Array.from(
-      Array(getDaysInMonth(new Date(year, month))),
+      Array(getDaysInMonth(currentDate)),
       (_, index) => index
     );
-
-    const numberOfDaysInNextMonth = Array.from(Array(15), (_, index) => index);
+    const numberOfDaysInNextMonth = Array.from(
+      Array(15),
+      (_, index) => new Date(nextMonth.setDate(index + 1))
+    );
 
     for (let week = 0; week < numberOfRows; week++) {
       daysInCalendar.push([]);
       for (let day = 0; day < 7; day++) {
         if (day < firstDayOfWeek && week === 0) {
-          daysInCalendar[week].push({
-            type: CalendarDayType.PREVIOUS,
-            date: new Date(year, month - 1, previousMonthDaysDisplayed[0] + 1),
-          });
+          daysInCalendar[week].push(previousMonthDaysDisplayed[0]);
           previousMonthDaysDisplayed.shift();
         } else if (day >= firstDayOfWeek || week !== 0) {
           if (numberOfDaysInThisMounth.length) {
-            daysInCalendar[week].push({
-              type: CalendarDayType.CURRENT,
-              date: new Date(year, month, numberOfDaysInThisMounth[0] + 1),
-            });
+            daysInCalendar[week].push(
+              new Date(currentDate.setDate(numberOfDaysInThisMounth[0] + 1))
+            );
             numberOfDaysInThisMounth.shift();
           } else {
-            daysInCalendar[week].push({
-              type: CalendarDayType.NEXT,
-              date: new Date(year, month + 1, numberOfDaysInNextMonth[0] + 1),
-            });
+            daysInCalendar[week].push(numberOfDaysInNextMonth[0]);
             numberOfDaysInNextMonth.shift();
           }
         }
@@ -98,76 +91,58 @@ export default function Datepicker({ isRange = false }: { isRange: boolean }) {
     setDaysInCalendar(daysInCalendar);
   }
 
-  useEffect(() => {
-    getDaysInCalendar();
-  }, [month, year]);
-
   const selectDayInCalendar = (day: Date) => {
-    if (!selectFirstDate) {
-      return setSelectFirstdate(day);
+    if (!firstDateSelected) {
+      return onFirstDateChange(day);
     }
-    if (selectFirstDate && !selectSecondDate) {
-      return setSelectSecondDate(day);
+    if (firstDateSelected && !secondDateSelected) {
+      return onSecondDateChange(day);
     }
-    if (selectFirstDate && selectSecondDate) {
-      if (day > selectFirstDate) {
-        setSelectSecondDate(day);
+    if (firstDateSelected && secondDateSelected) {
+      if (day > firstDateSelected) {
+        onSecondDateChange(day);
       }
-      if (day < selectSecondDate) {
-        setSelectFirstdate(day);
+      if (day < secondDateSelected) {
+        onFirstDateChange(day);
       }
     }
   };
 
-  function getMonthLabel(month: number) {
-    return format(new Date(year, month), "LLL	", {
-      locale: ptBR,
-    });
-  }
-
   const dayLabels = Array.from(Array(7), (_, index) => index).map((_, idx) => {
     const date = setDay(new Date(), idx);
-    return format(date, "EEEEE", { locale: ptBR });
+    return format(date, "EEEEE", { locale: locale });
   });
+
+  useEffect(() => {
+    getDaysInCalendar();
+  }, [currentDate]);
 
   return (
     <div>
-      <button
-        className="bg-violet-600 px-4 py-2 rounded-md text-yellow-50"
-        onClick={onOpenHandler}
-      >
-        Date Picker
-      </button>
-      <h1>
-        Meu primeiro dia selecionado:{" "}
-        {selectFirstDate && new Date(selectFirstDate).toISOString()}
-      </h1>
-      {isRange && (
-        <h1>
-          Meu segundo dia selecionado:{" "}
-          {selectSecondDate && new Date(selectSecondDate).toISOString()}
-        </h1>
-      )}
       <Modal
         isOpen={isOpen}
-        onRequestClose={onCloseHandler}
+        onRequestClose={onClose}
         className="mx-auto mt-80 w-80  bg-gray-50 drop-shadow-2xl rounded-md px-4"
       >
         <div className="h-full px-2 py-8">
           <div className="flex flex-col ">
-            <h2 className="text-lg font-semibold text-gray-700">{year}</h2>
+            <h2 className="text-lg font-semibold text-gray-700">
+              {currentDate.getFullYear()}
+            </h2>
             <div className="flex items-center justify-between mt-2 mb-4">
               <button
-                onClick={() => setMonth((prev) => prev - 1)}
+                onClick={() => setCurrentDate((prev) => subMonths(prev, 1))}
                 className="flex items-center justify-center h-8 w-8 hover:drop-shadow-2xl hover:bg-gray-200 rounded-md transition-shadow"
               >
                 <ChevronLeftIcon className="h-6 w-6" />
               </button>
               <h3 className="capitalize text-gray-800 font-semibold">
-                {getMonthLabel(month)}
+                {format(currentDate, "LLL	", {
+                  locale: locale,
+                })}
               </h3>
               <button
-                onClick={() => setMonth((prev) => prev + 1)}
+                onClick={() => setCurrentDate((prev) => addMonths(prev, 1))}
                 className="flex items-center justify-center h-8 w-8 hover:drop-shadow-2xl hover:bg-gray-200 rounded-md transition-shadow"
               >
                 <ChevronRightIcon className="h-6 w-6" />
@@ -191,48 +166,48 @@ export default function Datepicker({ isRange = false }: { isRange: boolean }) {
                 key={index}
                 className="w-full flex items-center justify-between"
               >
-                {weekDays.map((day, index) => (
+                {weekDays.map((date, index) => (
                   <button
-                    disabled={day.type !== CalendarDayType.CURRENT}
+                    disabled={getMonth(date) !== getMonth(currentDate)}
                     key={index}
                     className={`text-center w-full py-1 text-gray-800 disabled:text-zinc-400 disabled:bg-slate-50 transition-all delay-100
                   ${
-                    selectFirstDate && isEqual(selectFirstDate, day.date)
-                      ? "bg-gray-800 rounded-l-lg text-gray-50"
+                    firstDateSelected && isEqual(firstDateSelected, date)
+                      ? "bg-gray-800 rounded-l-lg text-gray-100"
                       : ""
                   }
                   ${
-                    selectSecondDate && isEqual(selectSecondDate, day.date)
-                      ? "bg-gray-800 rounded-r-lg text-gray-50"
+                    secondDateSelected && isEqual(secondDateSelected, date)
+                      ? "bg-gray-800 rounded-r-lg text-gray-100"
                       : ""
                   }
                   ${
-                    selectFirstDate &&
-                    !selectSecondDate &&
-                    isBefore(selectFirstDate, day.date) &&
+                    firstDateSelected &&
+                    !secondDateSelected &&
+                    isBefore(firstDateSelected, date) &&
                     hoveredDate &&
-                    isBefore(day.date, hoveredDate)
+                    isBefore(date, hoveredDate)
                       ? "bg-gray-400"
                       : ""
                   }
                   ${
-                    selectFirstDate &&
-                    isBefore(selectFirstDate, day.date) &&
-                    selectSecondDate &&
-                    isBefore(day.date, selectSecondDate)
+                    firstDateSelected &&
+                    isBefore(firstDateSelected, date) &&
+                    secondDateSelected &&
+                    isBefore(date, secondDateSelected)
                       ? "bg-gray-400"
                       : ""
                   }
                
                  `}
                     onMouseEnter={() => {
-                      if (!selectSecondDate) {
-                        setHoveredDate(day.date);
+                      if (!secondDateSelected) {
+                        setHoveredDate(date);
                       }
                     }}
-                    onClick={() => selectDayInCalendar(day.date)}
+                    onClick={() => selectDayInCalendar(date)}
                   >
-                    {new Date(day.date).getDate()}
+                    {new Date(date).getDate()}
                   </button>
                 ))}
               </div>
